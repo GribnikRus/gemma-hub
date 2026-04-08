@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemma Hub - Авторизация</title>
+    <style>
+        :root { --bg: #f4f6f9; --card: #ffffff; --primary: #3b82f6; --primary-hover: #2563eb; --text: #1f2937; --border: #e5e7eb; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+        
+        /* Стили для модального окна авторизации */
+        .auth-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .auth-modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            max-width: 400px;
+            width: 90%;
+        }
+        .auth-modal h2 { margin-bottom: 1rem; text-align: center; color: #111827; }
+        .auth-form input {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+        }
+        .auth-form button {
+            width: 100%;
+            padding: 0.8rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-bottom: 0.5rem;
+        }
+        .auth-form button:hover { background: var(--primary-hover); }
+        .auth-toggle {
+            text-align: center;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+        .auth-toggle a {
+            color: var(--primary);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .auth-status {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Модальное окно авторизации -->
+    <div id="auth-modal" class="auth-modal">
+        <div class="auth-modal-content">
+            <h2 id="auth-modal-title">🔑 Вход в систему</h2>
+            
+            <!-- Форма входа -->
+            <div id="login-form-container" class="auth-form">
+                <input type="text" id="login-username" placeholder="Логин" autocomplete="username">
+                <input type="password" id="login-password" placeholder="Пароль" autocomplete="current-password">
+                <button onclick="loginUser()">Войти</button>
+                <div class="auth-toggle">
+                    Нет аккаунта? <a onclick="toggleAuthForm('register')">Зарегистрироваться</a>
+                </div>
+            </div>
+            
+            <!-- Форма регистрации -->
+            <div id="register-form-container" class="auth-form" style="display: none;">
+                <input type="text" id="register-username" placeholder="Придумайте логин" autocomplete="username">
+                <input type="password" id="register-password" placeholder="Придумайте пароль" autocomplete="new-password">
+                <input type="text" id="register-name" placeholder="Ваше имя (необязательно)">
+                <button onclick="registerUser()">Зарегистрироваться</button>
+                <div class="auth-toggle">
+                    Уже есть аккаунт? <a onclick="toggleAuthForm('login')">Войти</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Контейнер статуса авторизации -->
+    <div id="auth-status-container" class="auth-status"></div>
+
+    <script>
+        // Переменные аутентификации
+        let currentUser = null;
+        let isLoggedIn = false;
+
+        // Проверка статуса аутентификации при загрузке
+        async function checkAuthStatus() {
+            try {
+                const res = await fetch('/api/auth/status');
+                const data = await res.json();
+                
+                if (data.authenticated) {
+                    isLoggedIn = true;
+                    currentUser = { client_id: data.client_id };
+                    updateAuthUI();
+                    // Скрываем модальное окно если пользователь уже авторизован
+                    hideAuthModal();
+                } else {
+                    showAuthModal();
+                }
+            } catch (e) {
+                console.error('Ошибка проверки статуса:', e);
+                showAuthModal();
+            }
+        }
+
+        // Показать модальное окно аутентификации
+        function showAuthModal() {
+            const modal = document.getElementById('auth-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+            }
+        }
+
+        // Скрыть модальное окно аутентификации
+        function hideAuthModal() {
+            const modal = document.getElementById('auth-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        // Переключение между входом и регистрацией
+        function toggleAuthForm(formType) {
+            const loginForm = document.getElementById('login-form-container');
+            const registerForm = document.getElementById('register-form-container');
+            const modalTitle = document.getElementById('auth-modal-title');
+            
+            if (formType === 'login') {
+                loginForm.style.display = 'block';
+                registerForm.style.display = 'none';
+                modalTitle.textContent = '🔑 Вход в систему';
+            } else {
+                loginForm.style.display = 'none';
+                registerForm.style.display = 'block';
+                modalTitle.textContent = '📝 Регистрация';
+            }
+        }
+
+        // Вход пользователя
+        async function loginUser() {
+            const loginInput = document.getElementById('login-username').value.trim();
+            const passwordInput = document.getElementById('login-password').value;
+            
+            if (!loginInput || !passwordInput) {
+                alert('Введите логин и пароль');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login: loginInput, password: passwordInput })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    isLoggedIn = true;
+                    currentUser = { client_id: data.client_uuid, login: loginInput };
+                    hideAuthModal();
+                    updateAuthUI();
+                    alert('Вы успешно вошли в систему!');
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            } catch (e) {
+                alert('Ошибка соединения с сервером');
+                console.error(e);
+            }
+        }
+
+        // Регистрация пользователя
+        async function registerUser() {
+            const loginInput = document.getElementById('register-username').value.trim();
+            const passwordInput = document.getElementById('register-password').value;
+            const nameInput = document.getElementById('register-name').value.trim();
+            
+            if (!loginInput || !passwordInput) {
+                alert('Логин и пароль обязательны');
+                return;
+            }
+            
+            if (passwordInput.length < 4) {
+                alert('Пароль должен быть не менее 4 символов');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login: loginInput, password: passwordInput, name: nameInput || undefined })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    isLoggedIn = true;
+                    currentUser = { client_id: data.client_uuid, login: loginInput };
+                    hideAuthModal();
+                    updateAuthUI();
+                    alert('Регистрация успешна! Добро пожаловать!');
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            } catch (e) {
+                alert('Ошибка соединения с сервером');
+                console.error(e);
+            }
+        }
+
+        // Выход пользователя
+        async function logoutUser() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                isLoggedIn = false;
+                currentUser = null;
+                updateAuthUI();
+                showAuthModal();
+                alert('Вы вышли из системы');
+            } catch (e) {
+                console.error('Ошибка выхода:', e);
+            }
+        }
+
+        // Обновление UI в зависимости от статуса аутентификации
+        function updateAuthUI() {
+            const authContainer = document.getElementById('auth-status-container');
+            if (!authContainer) return;
+            
+            if (isLoggedIn && currentUser) {
+                authContainer.innerHTML = `
+                    <span style="margin-right: 10px; font-weight: 500;">👤 ${currentUser.login || 'Пользователь'}</span>
+                    <button onclick="logoutUser()" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer;">🚪 Выйти</button>
+                `;
+            } else {
+                authContainer.innerHTML = `
+                    <button onclick="showAuthModal()" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer;">🔑 Войти</button>
+                `;
+            }
+        }
+
+        // Вызываем проверку при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuthStatus();
+        });
+    </script>
+</body>
+</html>
