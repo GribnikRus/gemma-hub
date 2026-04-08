@@ -276,6 +276,14 @@
             // Если переключаемся на вкладку "Чат", загрузим список групп для выбора
             if (tab === 'chat') {
                 loadChatGroups();
+                // После загрузки групп, если нет выбранной группы, загрузим личную историю
+                setTimeout(() => {
+                    const select = document.getElementById('chat-group-select');
+                    const selectedGroupId = select.getAttribute('data-selected-group');
+                    if (!selectedGroupId) {
+                        loadPersonalChatHistory();
+                    }
+                }, 300);
             }
         }
 
