@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemma Hub</title>
+    <style>
+        :root { --bg: #f4f6f9; --card: #ffffff; --primary: #3b82f6; --primary-hover: #2563eb; --text: #1f2937; --border: #e5e7eb; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+        .container { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+        h1 { text-align: center; margin-bottom: 1.5rem; color: #111827; }
+        
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; background: var(--card); padding: 0.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .tab { flex: 1; padding: 0.8rem; border: none; background: transparent; cursor: pointer; font-weight: 500; border-radius: 8px; transition: 0.2s; }
+        .tab.active { background: var(--primary); color: white; }
+        .tab:hover:not(.active) { background: #f3f4f6; }
+        
+        .module { display: none; background: var(--card); padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .module.active { display: block; }
+        
+        textarea, input[type="file"] { width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px; margin: 0.5rem 0 1rem; font-size: 1rem; }
+        textarea { resize: vertical; min-height: 100px; }
+        
+        button.action { width: 100%; padding: 0.8rem; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        button.action:hover { background: var(--primary-hover); }
+        button:disabled { background: #9ca3af; cursor: not-allowed; }
+        /* Кнопка внутри лога */
+        button.small { padding: 0.3rem 0.6rem; font-size: 0.9rem; margin-left: 0.5rem; }
+
+        .preview { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
+        .thumb { width: 100px; height: 100px; object-fit: cover; border-radius: 8px; border: 2px solid var(--border); }
+        
+        .log { background: #f9fafb; padding: 1rem; border-radius: 8px; min-height: 150px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; border: 1px solid var(--border); margin-top: 1rem; font-size: 0.95rem; }
+        .log .user { color: #059669; font-weight: bold; }
+        .log .assistant { color: #2563eb; }
+        .log .system { color: #6b7280; font-style: italic; font-size: 0.85rem; }
+        .log .group-item { color: #4b5563; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Gemma Hub <span style="font-size:0.6em; color:#6b7280">v1.0</span></h1>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('chat')">💬 Текстовый чат</button>
+            <button class="tab" onclick="switchTab('vision')">🖼️ Анализ изображений</button>
+            <button class="tab" onclick="switchTab('groups')">👥 Группы</button>
+        </div>
+
+        <!-- МОДУЛЬ 1: ЧАТ -->
+        <div id="mod-chat" class="module active">
+            <textarea id="chat-prompt" placeholder="Введите ваш вопрос или задание..."></textarea>
+            <button class="action" onclick="sendChat()" id="btn-chat">Отправить</button>
+            <div id="chat-log" class="log"><div class="system">Готов к диалогу. Задайте вопрос.</div></div>
+        </div>
+
+        <!-- МОДУЛЬ 2: ИЗОБРАЖЕНИЯ -->
+        <div id="mod-vision" class="module">
+            <input type="file" id="img-input" multiple accept="image/*" onchange="previewImages()">
+            <div id="img-preview" class="preview"></div>
+            <textarea id="vision-prompt" placeholder="Что нужно сделать с изображением? (например: 'Распознай текст', 'Опиши объекты')"></textarea>
+            <button class="action" onclick="sendVision()" id="btn-vision">Анализировать</button>
+            <div id="vision-log" class="log"><div class="system">Загрузите изображение и укажите задачу.</div></div>
+        </div>
+
+        <!-- МОДУЛЬ 3: ГРУППЫ -->
+        <div id="mod-groups" class="module">
+            <h3>Мои Группы</h3>
+            <h4>Доступные пользователи (для приглашения)</h4>
+                <div id="clients-list" class="log"></div>
+                <button onclick="loadAllClients()">🔄 Обновить список пользователей</button>
+
+                <h4>Ожидающие приглашения</h4>
+                <div id="invitations-list" class="log"></div>
+                <button onclick="loadPendingInvitations()">🔄 Обновить приглашения</button>
+            <div id="groups-list" class="log"></div>
+            <div id="group-history-container" style="display:none;">
+                <h3>История группы: <span id="current-group-name"></span></h3>
+                <div id="group-history-log" class="log"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Скрипт вставлен внутрь HTML -->
+    <script>
+        let imagesBase64 = [];
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(`mod-${tab}`).classList.add('active');
+
+            // Если переключаемся на вкладку "Группы", загрузим список групп
+            if (tab === 'groups') {
+                loadClientGroups();
+            }
+        }
+
+        function appendLog(containerId, role, text) {
+            const log = document.getElementById(containerId);
+            const div = document.createElement('div');
+            div.className = role;
+            div.innerHTML = role === 'user' ? `<b>Вы:</b> ${text}` : 
+                            role === 'assistant' ? `<b>Gemma:</b> ${text}` : text;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // --- УЛУЧШЕННАЯ ФУНКЦИЯ ЗАПРОСА С ОБРАБОТКОЙ ОШИБОК ---
+        async function fetchAPI(endpoint, payload) {
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    throw new Error(`HTTP ${res.status}: ${errorText}`);
+                }
+
+                const data = await res.json();
+                console.log("🌐 Ответ от API:", data); // Лог в консоль браузера
+                return data;
+
+            } catch (e) {
+                console.error("❌ Ошибка API:", e);
+                throw e;
+            }
+        }
+
+        // --- НОВАЯ ФУНКЦИЯ POLLING ---
+        async function pollTaskStatus(taskId, containerId, maxAttempts = 120, interval = 3000) {
+            let attempts = 0;
+            const logDiv = document.createElement('div'); // Исправлено: добавлена точка с запятой
+            logDiv.className = 'system'; // Исправлено: добавлена точка с запятой
+            logDiv.textContent = `⏳ Ожидание результата задачи ${taskId}...`;
+            document.getElementById(containerId).appendChild(logDiv);
+
+            while (attempts < maxAttempts) {
+                try {
+                    const res = await fetch(`/api/task-status/${taskId}`);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                    const statusData = await res.json();
+                    console.log("📊 Статус задачи:", statusData);
+
+                    if (statusData.status === 'success') {
+                        // Удаляем строку "ожидание"
+                        logDiv.remove();
+                        // Добавляем результат
+                        appendLog(containerId, 'assistant', statusData.result);
+                        return; // Успешно получили результат
+                    } else if (statusData.status === 'failure') {
+                        logDiv.remove();
+                        appendLog(containerId, 'system', `❌ Задача завершена с ошибкой: ${statusData.result}`);
+                        return;
+                    } else {
+                        // Обновляем сообщение о статусе
+                        logDiv.textContent = `⏳ Статус задачи ${taskId}: ${statusData.status}...`;
+                    }
+
+                } catch (e) {
+                    console.error("❌ Ошибка опроса статуса:", e);
+                    logDiv.textContent = `❌ Ошибка опроса статуса: ${e.message}`;
+                    return;
+                }
+
+                attempts++;
+                await new Promise(resolve => setTimeout(resolve, interval));
+            }
+
+            logDiv.textContent = `⏰ Таймаут ожидания результата задачи ${taskId}.`;
+        }
+
+        // --- ФУНКЦИЯ: Загрузить список групп текущего клиента ---
+        async function loadClientGroups() {
+            try {
+                const res = await fetch('/api/client/groups');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const data = await res.json();
+                console.log("👥 Список групп:", data);
+
+                const container = document.getElementById('groups-list');
+                if (!data.success) {
+                    container.innerHTML = `<div class="system">❌ Ошибка получения групп: ${data.error}</div>`;
+                    return;
+                }
+
+                if (data.groups.length === 0) {
+                    container.innerHTML = '<div class="system">Вы не состоите ни в одной группе.</div>';
+                    return;
+                }
+
+                container.innerHTML = ''; // Очистим перед загрузкой
+                data.groups.forEach(group => {
+                    const groupDiv = document.createElement('div');
+                    groupDiv.className = 'group-item';
+                    // Отформатируем дату, если нужно
+                    const formattedDate = new Date(group.joined_at).toLocaleString();
+                    groupDiv.innerHTML = `
+                        <b>${group.name}</b> (ID: ${group.id}) - Присоединён: ${formattedDate}
+                        <br><button class="small" onclick="loadGroupHistory(${group.id}, '${group.name.replace(/'/g, "&apos;")}')">Показать историю</button>
+                    `;
+                    container.appendChild(groupDiv);
+                });
+
+            } catch (e) {
+                console.error("❌ Ошибка загрузки групп:", e);
+                document.getElementById('groups-list').innerHTML = `<div class="system">❌ Ошибка загрузки групп: ${e.message}</div>`;
+            }
+        }
+
+        // --- ФУНКЦИЯ: Загрузить историю для конкретной группы ---
+        async function loadGroupHistory(groupId, groupName) {
+            try {
+                const res = await fetch(`/api/group/${groupId}/history?limit=50`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const data = await res.json();
+                console.log(`📚 История для группы ${groupName}:`, data);
+
+                if (!data.success) {
+                    document.getElementById('group-history-log').innerHTML = `<div class="system">❌ Ошибка получения истории: ${data.error}</div>`;
+                    return;
+                }
+
+                const historyContainer = document.getElementById('group-history-log');
+                const nameSpan = document.getElementById('current-group-name');
+                nameSpan.textContent = groupName;
+
+                if (data.history.length === 0) {
+                    historyContainer.innerHTML = '<div class="system">В этой группе пока нет задач.</div>';
+                    document.getElementById('group-history-container').style.display = 'block';
+                    return;
+                }
+
+                historyContainer.innerHTML = ''; // Очистим перед загрузкой
+
+                data.history.forEach(item => {
+                    const itemDiv = document.createElement('div');
+                    // Используем 'group-item', чтобы отличить от личных сообщений
+                    itemDiv.className = 'group-item';
+                    const formattedTime = new Date(item.created_at).toLocaleString();
+                    itemDiv.innerHTML = `
+                        [<b>${item.client_name}</b> @ ${formattedTime}] (<i>${item.module}</i>)
+                        <br><b>Запрос:</b> ${item.prompt}
+                        <br><b>Ответ:</b> ${item.response}
+                        <hr>
+                    `;
+                    historyContainer.appendChild(itemDiv);
+                });
+
+                document.getElementById('group-history-container').style.display = 'block';
+
+            } catch (e) {
+                console.error("❌ Ошибка загрузки истории группы:", e);
+                document.getElementById('group-history-log').innerHTML = `<div class="system">❌ Ошибка загрузки истории: ${e.message}</div>`;
+            }
+        }
+        // --- ФУНКЦИЯ: Загрузить список всех клиентов ---
+        async function loadAllClients() {
+            try {
+                // Сначала загрузим *мои* группы (владелец), чтобы использовать их в приглашениях
+                const groupsRes = await fetch('/api/client/groups');
+                if (!groupsRes.ok) throw new Error(`HTTP ${groupsRes.status} при загрузке групп`);
+                const groupsData = await groupsRes.json();
+                console.log("👥 Мои группы (владелец):", groupsData);
+
+                if (!groupsData.success) {
+                    document.getElementById('clients-list').innerHTML = `<div class="system">❌ Ошибка получения моих групп: ${groupsData.error}</div>`;
+                    return;
+                }
+
+                // Отфильтруем группы, где я владелец. Нужно добавить маршрут, который возвращает это.
+                // Пока что, просто запросим список всех групп, где я владелец.
+                // Нужно добавить новый маршрут в app.py: /api/client/owned-groups
+                const ownedGroupsRes = await fetch('/api/client/owned-groups'); // Нужно добавить!
+                if (!ownedGroupsRes.ok) throw new Error(`HTTP ${ownedGroupsRes.status} при загрузке моих групп-владений`);
+                const ownedGroupsData = await ownedGroupsRes.json();
+                console.log("👑 Мои группы (владелец):", ownedGroupsData);
+
+                if (!ownedGroupsData.success) {
+                    document.getElementById('clients-list').innerHTML = `<div class="system">❌ Ошибка получения моих групп-владений: ${ownedGroupsData.error}</div>`;
+                    return;
+                }
+
+                const ownedGroups = ownedGroupsData.groups;
+
+                if (ownedGroups.length === 0) {
+                    document.getElementById('clients-list').innerHTML = '<div class="system">Вы не являетесь владельцем ни одной группы. Создайте группу, чтобы приглашать.</div>';
+                    return;
+                }
+
+                // Теперь загрузим список всех клиентов
+                const res = await fetch('/api/clients/list');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const data = await res.json();
+                console.log("🌐 Список всех клиентов:", data);
+
+                const container = document.getElementById('clients-list');
+                if (!data.success) {
+                    container.innerHTML = `<div class="system">❌ Ошибка получения списка: ${data.error}</div>`;
+                    return;
+                }
+
+                if (data.clients.length === 0) {
+                    container.innerHTML = '<div class="system">В системе пока нет других пользователей.</div>';
+                    return;
+                }
+
+                container.innerHTML = ''; // Очистим перед загрузкой
+                data.clients.forEach(client => {
+                    // Пропустим текущего пользователя
+                    if (client.client_uuid === getCookie('client_id')) return;
+
+                    const clientDiv = document.createElement('div');
+                    clientDiv.className = 'group-item';
+                    const formattedDate = new Date(client.created_at).toLocaleString();
+                    // Изменим кнопку: теперь она будет открывать выбор группы
+                    clientDiv.innerHTML = `
+                        <b>${client.name}</b> (ID: ${client.client_uuid.substring(0, 8)}...) - Зарегистрирован: ${formattedDate}
+                        <br><button class="small" onclick="showInviteDialog('${client.client_uuid}', '${client.name.replace(/'/g, "&apos;")}', ${JSON.stringify(ownedGroups).replace(/"/g, '&quot;')})">Пригласить в группу...</button>
+                    `;
+                    container.appendChild(clientDiv);
+                });
+
+            } catch (e) {
+                console.error("❌ Ошибка загрузки списка клиентов или моих групп:", e);
+                document.getElementById('clients-list').innerHTML = `<div class="system">❌ Ошибка загрузки: ${e.message}</div>`;
+            }
+        }
+        // --- ФУНКЦИЯ: Показать диалог для выбора группы и отправки приглашения ---
+        function showInviteDialog(targetClientUuid, targetClientName, ownedGroupsArray) {
+            // Создадим простое окно выбора (можно улучшить с помощью modal)
+            const groupOptions = ownedGroupsArray.map(g => `<option value="${g.id}">${g.name} (ID: ${g.id})</option>`).join('');
+            const dialogHtml = `
+                <label for="group-select">Выберите группу для приглашения ${targetClientName}:</label>
+                <select id="group-select" name="group-select">
+                    ${groupOptions}
+                </select>
+                <button onclick="performInvite('${targetClientUuid}', '${targetClientName}', document.getElementById('group-select').value)">Пригласить</button>
+                <button onclick="closeInviteDialog()">Отмена</button>
+            `;
+
+            // Поместим диалог внутрь специального контейнера или поверх другого элемента
+            const dialogContainer = document.getElementById('invite-dialog-container');
+            if(dialogContainer) {
+                dialogContainer.innerHTML = dialogHtml;
+                dialogContainer.style.display = 'block';
+            } else {
+                // Если контейнера нет, создадим его
+                const newContainer = document.createElement('div');
+                newContainer.id = 'invite-dialog-container';
+                newContainer.style.position = 'fixed';
+                newContainer.style.top = '50%';
+                newContainer.style.left = '50%';
+                newContainer.style.transform = 'translate(-50%, -50%)';
+                newContainer.style.background = '#fff';
+                newContainer.style.padding = '1rem';
+                newContainer.style.border = '1px solid var(--border)';
+                newContainer.style.borderRadius = '8px';
+                newContainer.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+                newContainer.style.zIndex = '1000';
+                newContainer.innerHTML = dialogHtml;
+                document.body.appendChild(newContainer);
+            }
+        }
+
+        function closeInviteDialog() {
+            const container = document.getElementById('invite-dialog-container');
+            if(container) {
+                container.style.display = 'none';
+                // Удалим элемент, чтобы не накапливались
+                container.remove();
+            }
+        }
+
+        // --- ФУНКЦИЯ: Выполнить приглашение ---
+        async function performInvite(targetClientUuid, targetClientName, groupIdStr) {
+            const groupId = parseInt(groupIdStr);
+            if(isNaN(groupId)) {
+                alert('Неверный ID группы.');
+                return;
+            }
+
+            try {
+                closeInviteDialog(); // Закрываем диалог
+
+                const res = await fetch('/api/group/invite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        group_id: groupId,
+                        target_client_uuid: targetClientUuid
+                    })
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const data = await res.json();
+                console.log("✉️ Результат приглашения:", data);
+
+                if (data.success) {
+                    alert(`Приглашение пользователю ${targetClientName} в группу ${groupId} отправлено.`);
+                    // Опционально: обновить список приглашений
+                    loadPendingInvitations();
+                } else {
+                    alert(`Ошибка приглашения: ${data.error}`);
+                }
+
+            } catch (e) {
+                console.error("❌ Ошибка отправки приглашения:", e);
+                alert(`Ошибка приглашения: ${e.message}`);
+            }
+        }
+
+        // Вспомогательная функция для получения cookie
+        function getCookie(name) {
+            let value = "; " + document.cookie;
+            let parts = value.split("; " + name + "=");
+            if (parts.length == 2) return parts.pop().split(";").shift();
+        }
+        // --- ФУНКЦИЯ: Пригласить пользователя в группу ---
+        async function inviteToGroup(targetClientUuid, targetClientName) {
+            // Сначала нужно выбрать группу, в которую приглашать
+            const groupId = prompt(`Введите ID группы, в которую пригласить ${targetClientName} (например, 1, 2, ...)`);
+
+            if (!groupId) {
+                alert('Приглашение отменено.');
+                return;
+            }
+
+            // Проверим, является ли groupId числом
+            if (isNaN(groupId)) {
+                alert('ID группы должен быть числом.');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/group/invite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        group_id: parseInt(groupId),
+                        target_client_uuid: targetClientUuid
+                    })
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const data = await res.json();
+                console.log("✉️ Результат приглашения:", data);
+
+                if (data.success) {
+                    alert(`Приглашение пользователю ${targetClientName} отправлено.`);
+                    // Опционально: обновить список приглашений
+                    loadPendingInvitations();
+                } else {
+                    alert(`Ошибка приглашения: ${data.error}`);
+                }
+
+            } catch (e) {
+                console.error("❌ Ошибка отправки приглашения:", e);
+                alert(`Ошибка приглашения: ${e.message}`);
+            }
+        }
+                // --- ФУНКЦИЯ: Загрузить ожидающие приглашения для текущего пользователя ---
+        async function loadPendingInvitations() {
+            try {
+                // Нужно получить client_id текущего пользователя
+                const clientId = getCookie('client_id');
+                if (!clientId) {
+                    document.getElementById('invitations-list').innerHTML = '<div class="system">❌ Не удалось получить ваш ID. Обновите страницу.</div>';
+                    return;
+                }
+
+                // Сначала получим список всех групп, чтобы знать названия
+                const groupsRes = await fetch('/api/client/groups');
+                if (!groupsRes.ok) throw new Error(`HTTP ${groupsRes.status} при загрузке групп`);
+                const groupsData = await groupsRes.json();
+                const groupMap = {};
+                if(groupsData.success) {
+                    groupsData.groups.forEach(g => groupMap[g.id] = g.name);
+                }
+
+                // Затем получим приглашения
+                const res = await fetch('/api/client/invitations/pending'); // Нужно добавить маршрут!
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const data = await res.json();
+                console.log("📨 Список ожидающих приглашений:", data);
+
+                const container = document.getElementById('invitations-list');
+                if (!data.success) {
+                    container.innerHTML = `<div class="system">❌ Ошибка получения приглашений: ${data.error}</div>`;
+                    return;
+                }
+
+                if (data.invitations.length === 0) {
+                    container.innerHTML = '<div class="system">У вас нет ожидающих приглашений.</div>';
+                    return;
+                }
+
+                container.innerHTML = ''; // Очистим перед загрузкой
+                data.invitations.forEach(inv => {
+                    const invDiv = document.createElement('div');
+                    invDiv.className = 'group-item';
+                    const groupName = groupMap[inv.group_id] || `Группа ${inv.group_id}`;
+                    invDiv.innerHTML = `
+                        Приглашение в группу <b>${groupName}</b> от пользователя <b>${inv.inviter_name}</b>.
+                        <br><button class="small" onclick="respondToInvite(${inv.membership_id}, 'accept')">✅ Принять</button>
+                        <button class="small" onclick="respondToInvite(${inv.membership_id}, 'reject')">❌ Отклонить</button>
+                    `;
+                    container.appendChild(invDiv);
+                });
+
+            } catch (e) {
+                console.error("❌ Ошибка загрузки приглашений:", e);
+                document.getElementById('invitations-list').innerHTML = `<div class="system">❌ Ошибка загрузки приглашений: ${e.message}</div>`;
+            }
+        }
+                // --- ФУНКЦИЯ: Ответить на приглашение ---
+        async function respondToInvite(membershipId, action) {
+            try {
+                const res = await fetch('/api/group/respond-invite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        membership_id: membershipId,
+                        action: action
+                    })
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const data = await res.json();
+                console.log(`🤝 Результат ответа на приглашение ${action}:`, data);
+
+                if (data.success) {
+                    alert(`Приглашение ${action === 'accept' ? 'принято' : 'отклонено'}.`);
+                    // Обновить список приглашений
+                    loadPendingInvitations();
+                    // Опционально: обновить список групп, если приняли
+                    if(action === 'accept') {
+                        loadClientGroups();
+                    }
+                } else {
+                    alert(`Ошибка при ответе на приглашение: ${data.error}`);
+                }
+
+            } catch (e) {
+                console.error("❌ Ошибка ответа на приглашение:", e);
+                alert(`Ошибка при ответе на приглашение: ${e.message}`);
+            }
+        }
+        
+
+        // --- ЧАТ ---
+        async function sendChat() {
+            const prompt = document.getElementById('chat-prompt').value.trim();
+            if (!prompt) return;
+            const btn = document.getElementById('btn-chat');
+            btn.disabled = true; appendLog('chat-log', 'user', prompt);
+            
+            try {
+                const data = await fetchAPI('/api/chat', { prompt });
+                // Запускаем опрос статуса задачи
+                await pollTaskStatus(data.task_id, 'chat-log');
+
+            } catch (e) {
+                appendLog('chat-log', 'system', `❌ Ошибка: ${e.message}`);
+            } finally {
+                btn.disabled = false;
+                document.getElementById('chat-prompt').value = '';
+            }
+        }
+
+        // --- ИЗОБРАЖЕНИЯ ---
+        function previewImages() {
+            const input = document.getElementById('img-input');
+            const container = document.getElementById('img-preview');
+            container.innerHTML = '';
+            imagesBase64 = [];
+            
+            Array.from(input.files).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imagesBase64.push(e.target.result.split(',')[1]);
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.className = 'thumb';
+                    container.appendChild(img);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function sendVision() {
+            const prompt = document.getElementById('vision-prompt').value.trim() || 'Опиши изображение.';
+            if (imagesBase64.length === 0) { alert('Загрузите хотя бы одно изображение!'); return; }
+            
+            const btn = document.getElementById('btn-vision');
+            btn.disabled = true; appendLog('vision-log', 'user', `${prompt} (${imagesBase64.length} изобр.)`);
+            
+            try {
+                const data = await fetchAPI('/api/vision', { prompt, images: imagesBase64 });
+                // Запускаем опрос статуса задачи
+                await pollTaskStatus(data.task_id, 'vision-log');
+
+                // Очистка после отправки (опционально, можно убрать, если хочешь видеть изображения)
+                // document.getElementById('img-input').value = '';
+                // document.getElementById('img-preview').innerHTML = '';
+                imagesBase64 = [];
+                
+            } catch (e) {
+                appendLog('vision-log', 'system', `❌ Ошибка: ${e.message}`);
+            } finally {
+                btn.disabled = false;
+                document.getElementById('vision-prompt').value = '';
+            }
+        }
+
+        // Отправка по Ctrl+Enter
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                const active = document.querySelector('.module.active').id;
+                if (active === 'mod-chat') sendChat();
+                if (active === 'mod-vision') sendVision();
+                if (active === 'mod-groups') loadClientGroups(); // Пример действия для Ctrl+Enter на вкладке "Группы"
+            }
+        });
+    </script>
+</body>
+</html>
