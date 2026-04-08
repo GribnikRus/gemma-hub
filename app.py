@@ -410,5 +410,50 @@ def api_client_owned_groups():
         return jsonify({"success": False, "error": f"Внутренняя ошибка сервера: {str(e)}"}), 500
 
     
+
+# --- НОВЫЙ маршрут: Отмена задачи по ID с подтверждением паролем ---
+@app.route('/api/task/cancel', methods=['POST'])
+def api_task_cancel():
+    try:
+        data = request.json
+        task_id = data.get('task_id')
+        password = data.get('password')
+
+        if not task_id:
+            return jsonify({"success": False, "error": "Поле 'task_id' обязательно"}), 400
+
+        # Проверка пароля (постоянный пароль "20021977")
+        if password != "20021977":
+            logger.warning(f"⚠️ Неверный пароль при попытке отмены задачи {task_id}")
+            return jsonify({"success": False, "error": "Неверный пароль"}), 403
+
+        logger.info(f"🛑 Попытка отмены задачи {task_id} с подтверждением паролем")
+
+        # Отменяем задачу через Celery
+        from celery.result import AsyncResult
+        task_result = AsyncResult(task_id, app=celery_app)
+        
+        # Проверяем текущий статус задачи
+        if task_result.state in ['SUCCESS', 'FAILURE', 'REVOKED']:
+            return jsonify({
+                "success": False, 
+                "error": f"Задача уже завершена со статусом: {task_result.state}"
+            }), 400
+
+        # Отменяем задачу
+        celery_app.control.revoke(task_id, terminate=True)
+        
+        logger.info(f"✅ Задача {task_id} успешно отменена")
+
+        return jsonify({
+            "success": True,
+            "message": f"Задача {task_id} успешно отменена"
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка при отмене задачи {task_id}: {e}")
+        return jsonify({"success": False, "error": f"Внутренняя ошибка сервера: {str(e)}"}), 500
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5002, debug=False)

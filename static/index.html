@@ -115,6 +115,8 @@
     <!-- Скрипт вставлен внутрь HTML -->
     <script>
         let imagesBase64 = [];
+        let currentChatTaskId = null;
+        let currentVisionTaskId = null;
         
         // Константа для localStorage - история промтов для изображений
         const VISION_PROMPTS_KEY = 'vision_prompts_history';
