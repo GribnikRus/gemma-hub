@@ -130,6 +130,36 @@ def authenticate_user(login, password):
     except Exception as e:
         logger.error(f"❌ Ошибка аутентификации пользователя: {e}")
         raise
+
+def get_user_by_client_uuid(client_uuid):
+    """Получает информацию о пользователе по client_uuid. Возвращает dict с login, name или None."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        cur.execute("""
+            SELECT u.id, u.login, u.name, u.client_uuid
+            FROM users u
+            WHERE u.client_uuid = %s;
+        """, (client_uuid,))
+        
+        result = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if result:
+            return {
+                "id": result["id"],
+                "login": result["login"],
+                "name": result["name"],
+                "client_uuid": result["client_uuid"]
+            }
+        return None
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения пользователя: {e}")
+        return None
+
 def is_group_owner(group_id, owner_client_uuid):
     """
     Проверяет, является ли клиент owner_client_uuid владельцем группы group_id.
