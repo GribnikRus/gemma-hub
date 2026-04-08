@@ -1,13 +1,5 @@
-
-*.pyc
-.env
-.DS_Store
-*.log
-*.pid
-*.tmp
-
-
 __pycache__/
+*.pyc
 *.o
 *.obj
 *.class
@@ -16,8 +8,15 @@ __pycache__/
 *.so
 *.a
 *.out
-
-# Dependencies
+.env
+.env.local
+*.env.*
+.DS_Store
+*.log
+*.pid
+*.tmp
+*.swp
+*.swo
 .venv/
 venv/
 node_modules/
@@ -27,32 +26,12 @@ dist/
 build/
 target/
 .gradle/
-
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-*.swo
-
-# Environment
-.env
-.env.local
-*.env.*
-
-# Editors
 .vscode/
 .idea/
-
-# System
-.DS_Store
 Thumbs.db
-
-# Coverage
 coverage/
 htmlcov/
 .coverage
-
-# Compressed files
 *.zip
 *.gz
 *.tar
@@ -75,4 +54,4 @@ htmlcov/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-```
+dump.rdb
