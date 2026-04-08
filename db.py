@@ -245,7 +245,7 @@ def get_task_history_by_client(client_uuid, limit=20):
             WHERE client_id = %s
             ORDER BY created_at DESC
             LIMIT %s
-        """, (client_uuid, limit)) # Используем client_uuid из cookies, который должен совпадать
+        """, (client_db_id, limit)) # Используем DB ID клиента, а не UUID
         rows = cur.fetchall()
         cur.close()
         conn.close()
@@ -460,7 +460,7 @@ def get_group_history(group_id, limit=50):
         cur.execute("""
             SELECT th.module, th.prompt, th.response, th.created_at, th.status, c.name as client_name
             FROM task_history th
-            JOIN clients c ON th.client_id = c.client_uuid -- Предполагаем, что client_id в task_history это UUID
+            JOIN clients c ON th.client_id = c.id  -- Исправлено: client_id это INTEGER (DB ID)
             JOIN group_memberships gm ON c.id = gm.client_id
             WHERE gm.group_id = %s AND gm.status = 'accepted'
             ORDER BY th.created_at DESC
