@@ -189,21 +189,22 @@ def is_group_owner(group_id, owner_client_uuid):
         logger.error(f"❌ Ошибка при проверке владельца группы {group_id}: {e}")
         raise
 
-def save_task_history(user_ip, module, prompt, response, images_count=0, audio_duration=0, status="completed", client_id=None):
-    """Сохраняет историю задачи в БД. Теперь принимает client_id."""
+def save_task_history(user_ip, module, prompt, response, images_count=0, audio_duration=0, status="completed", client_id=None, group_id=None):
+    """Сохраняет историю задачи в БД. Теперь принимает client_id и group_id."""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO task_history (user_ip, module, prompt, response, images_count, audio_duration_sec, status, client_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (user_ip, module, prompt, response, images_count, audio_duration, status, client_id))
+            INSERT INTO task_history (user_ip, module, prompt, response, images_count, audio_duration_sec, status, client_id, group_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (user_ip, module, prompt, response, images_count, audio_duration, status, client_id, group_id))
         conn.commit()
         cur.close()
         conn.close()
-        logger.info(f"✅ Задача сохранена в БД: {module}, status: {status}, client_id: {client_id}")
+        logger.info(f"✅ Задача сохранена в БД: {module}, status: {status}, client_id: {client_id}, group_id: {group_id}")
     except Exception as e:
-        logger.error(f"❌ О БД: {e}")
+        logger.error(f"❌ Ошибка БД: {e}")
+
 
 def get_task_history(limit=50):
     """Получает последние задачи из БД (для администратора/общего просмотра)."""

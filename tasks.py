@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 celery_app = Celery('gemma_tasks', broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
 
 @celery_app.task(bind=True, max_retries=3)
-def process_chat_task(self, prompt, user_ip, client_id):
+def process_chat_task(self, prompt, user_ip, client_id, group_id=None):
     try:
-        logger.info(f"💬 Начинаю обработку чата (client_id: {client_id}): {prompt[:30]}...")
+        logger.info(f"💬 Начинаю обработку чата (client_id: {client_id}, group_id: {group_id}): {prompt[:30]}...")
         payload = {
             "model": OLLAMA_MODEL_CHAT,
             "prompt": prompt,
@@ -23,27 +23,27 @@ def process_chat_task(self, prompt, user_ip, client_id):
         response.raise_for_status()
         result = response.json().get("response", "Модель не вернула ответ.")
 
-        # Сохраняем в БД с client_id
-        save_task_history(user_ip, "chat", prompt, result, client_id=client_id)
+        # Сохраняем в БД с client_id и group_id
+        save_task_history(user_ip, "chat", prompt, result, client_id=client_id, group_id=group_id)
         logger.info("✅ Задача чата завершена")
         return result
 
     except requests.exceptions.Timeout:
         error_msg = f"⏰ Таймаут при запросе к Ollama при обработке чата."
         logger.error(error_msg)
-        save_task_history(user_ip, "chat", prompt, error_msg, status="failed", client_id=client_id)
+        save_task_history(user_ip, "chat", prompt, error_msg, status="failed", client_id=client_id, group_id=group_id)
         raise self.retry(exc=Exception(error_msg), countdown=60)
 
     except requests.exceptions.RequestException as e:
         error_msg = f"❌ Ошибка соединения с Ollama при обработке чата: {e}"
         logger.error(error_msg)
-        save_task_history(user_ip, "chat", prompt, error_msg, status="failed", client_id=client_id)
+        save_task_history(user_ip, "chat", prompt, error_msg, status="failed", client_id=client_id, group_id=group_id)
         raise self.retry(exc=e, countdown=60)
 
     except Exception as exc:
         error_msg = f"❌ Непредвиденная ошибка при обработке чата: {exc}"
         logger.error(error_msg)
-        save_task_history(user_ip, "chat", prompt, error_msg, status="failed", client_id=client_id)
+        save_task_history(user_ip, "chat", prompt, error_msg, status="failed", client_id=client_id, group_id=group_id)
         raise self.retry(exc=exc, countdown=60)
 
 @celery_app.task(bind=True, max_retries=3)
