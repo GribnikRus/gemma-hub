@@ -1,7 +1,7 @@
 # app.py
 from flask import Flask, request, jsonify, Response, make_response
 from tasks import process_chat_task, process_vision_task, celery_app
-from db import get_task_history_by_client, get_task_history, create_or_get_client_id_db, register_user, authenticate_user # Исправлен импорт
+from db import get_task_history_by_client, get_task_history, create_or_get_client_id_db, register_user, authenticate_user, get_user_by_client_uuid # Исправлен импорт
 import logging
 import os
 import uuid
@@ -80,7 +80,8 @@ def api_register():
         response = make_response(jsonify({
             "success": True,
             "message": f"Пользователь '{login}' успешно зарегистрирован",
-            "client_uuid": client_uuid
+            "client_uuid": client_uuid,
+            "user": get_user_by_client_uuid(client_uuid)
         }))
         
         # Устанавливаем cookie с client_uuid
@@ -121,7 +122,8 @@ def api_login():
         response = make_response(jsonify({
             "success": True,
             "message": f"Пользователь '{login}' успешно вошёл в систему",
-            "client_uuid": client_uuid
+            "client_uuid": client_uuid,
+            "user": get_user_by_client_uuid(client_uuid)
         }))
         
         # Устанавливаем cookie с client_uuid
@@ -161,9 +163,12 @@ def api_auth_status():
         
         if client_id:
             ensure_client_in_db(client_id)
+            # Получаем информацию о пользователе
+            user_info = get_user_by_client_uuid(client_id)
             return jsonify({
                 "authenticated": True,
-                "client_id": client_id
+                "client_id": client_id,
+                "user": user_info
             })
         else:
             return jsonify({
