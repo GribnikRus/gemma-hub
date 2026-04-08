@@ -3,9 +3,18 @@ import psycopg2
 from config import DATABASE_URL
 from psycopg2.extras import RealDictCursor
 import logging
+import hashlib
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def hash_password(password):
+    """Хеширует пароль с помощью SHA-256."""
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+def verify_password(password, password_hash):
+    """Проверяет соответствие пароля хешу."""
+    return hash_password(password) == password_hash
 
 def get_db_connection():
     """Создаёт подключение к БД."""
@@ -49,6 +58,77 @@ def create_or_get_client_id_db(client_uuid):
 
     except Exception as e:
         logger.error(f"❌ Ошибка при создании/получении клиента в БД: {e}")
+        raise
+
+def register_user(login, password, name=None):
+    """Регистрирует нового пользователя с логином и паролем. Возвращает client_uuid."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Проверка, существует ли уже пользователь с таким логином
+        cur.execute("SELECT id FROM users WHERE login = %s;", (login,))
+        if cur.fetchone():
+            cur.close()
+            conn.close()
+            raise ValueError(f"Пользователь с логином '{login}' уже существует")
+        
+        # Хешируем пароль
+        password_hash = hash_password(password)
+        
+        # Создаём запись в таблице users
+        cur.execute("""
+            INSERT INTO users (login, password_hash, name)
+            VALUES (%s, %s, %s)
+            RETURNING id, client_uuid;
+        """, (login, password_hash, name or f"User_{login}"))
+        
+        result = cur.fetchone()
+        user_db_id, client_uuid = result
+        conn.commit()
+        
+        cur.close()
+        conn.close()
+        
+        logger.info(f"🆕 Пользователь '{login}' зарегистрирован, DB ID: {user_db_id}, Client UUID: {client_uuid}")
+        return client_uuid
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка регистрации пользователя: {e}")
+        raise
+
+def authenticate_user(login, password):
+    """Аутентифицирует пользователя по логину и паролю. Возвращает client_uuid или None."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Получаем хеш пароля
+        cur.execute("SELECT id, password_hash, client_uuid FROM users WHERE login = %s;", (login,))
+        result = cur.fetchone()
+        
+        if not result:
+            cur.close()
+            conn.close()
+            logger.warning(f"⚠️ Пользователь '{login}' не найден")
+            return None
+        
+        user_db_id, stored_password_hash, client_uuid = result
+        
+        # Проверяем пароль
+        if verify_password(password, stored_password_hash):
+            cur.close()
+            conn.close()
+            logger.info(f"✅ Пользователь '{login}' успешно аутентифицирован, Client UUID: {client_uuid}")
+            return client_uuid
+        else:
+            cur.close()
+            conn.close()
+            logger.warning(f"⚠️ Неверный пароль для пользователя '{login}'")
+            return None
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка аутентификации пользователя: {e}")
         raise
 def is_group_owner(group_id, owner_client_uuid):
     """

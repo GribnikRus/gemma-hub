@@ -1,7 +1,7 @@
 # app.py
 from flask import Flask, request, jsonify, Response, make_response
 from tasks import process_chat_task, process_vision_task, celery_app
-from db import get_task_history_by_client, get_task_history, create_or_get_client_id_db # Исправлен импорт
+from db import get_task_history_by_client, get_task_history, create_or_get_client_id_db, register_user, authenticate_user # Исправлен импорт
 import logging
 import os
 import uuid
@@ -13,7 +13,7 @@ STATIC_FOLDER = os.path.join(os.path.dirname(__file__), 'static')
 logger.info(f"📁 Папка статики: {STATIC_FOLDER}")
 logger.info(f"📁 Файл index.html существует: {os.path.exists(os.path.join(STATIC_FOLDER, 'index.html'))}")
 
-app = Flask(__name__)#, static_folder=STATIC_FOLDER)
+app = Flask(__name__)#, static_folder=STATIC_FOLDER__)
 
 def get_or_create_client_id():
     """Получает client_id из cookie или создает новый."""
@@ -57,6 +57,126 @@ def index():
     except Exception as e:
         logger.error(f"❌ Ошибка при отправке index.html: {e}")
         return f"Ошибка сервера: {e}", 500
+
+# --- Маршруты для аутентификации ---
+@app.route('/api/auth/register', methods=['POST'])
+def api_register():
+    """Регистрация нового пользователя."""
+    try:
+        data = request.json
+        login = data.get('login')
+        password = data.get('password')
+        name = data.get('name')
+        
+        if not login or not password:
+            return jsonify({"success": False, "error": "Логин и пароль обязательны"}), 400
+        
+        logger.info(f"📝 Попытка регистрации пользователя: {login}")
+        
+        # Регистрируем пользователя
+        client_uuid = register_user(login, password, name)
+        
+        # Создаём ответ с cookie
+        response = make_response(jsonify({
+            "success": True,
+            "message": f"Пользователь '{login}' успешно зарегистрирован",
+            "client_uuid": client_uuid
+        }))
+        
+        # Устанавливаем cookie с client_uuid
+        response.set_cookie('client_id', client_uuid, httponly=True, samesite='Lax', max_age=30*24*60*60)
+        
+        return response
+        
+    except ValueError as ve:
+        logger.error(f"❌ Ошибка валидации при регистрации: {ve}")
+        return jsonify({"success": False, "error": str(ve)}), 400
+    except Exception as e:
+        logger.error(f"❌ Ошибка при регистрации: {e}")
+        return jsonify({"success": False, "error": f"Внутренняя ошибка сервера: {str(e)}"}), 500
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    """Вход пользователя."""
+    try:
+        data = request.json
+        login = data.get('login')
+        password = data.get('password')
+        
+        if not login or not password:
+            return jsonify({"success": False, "error": "Логин и пароль обязательны"}), 400
+        
+        logger.info(f"🔑 Попытка входа пользователя: {login}")
+        
+        # Аутентифицируем пользователя
+        client_uuid = authenticate_user(login, password)
+        
+        if not client_uuid:
+            return jsonify({"success": False, "error": "Неверный логин или пароль"}), 401
+        
+        # Убедимся, что запись в clients есть
+        ensure_client_in_db(client_uuid)
+        
+        # Создаём ответ с cookie
+        response = make_response(jsonify({
+            "success": True,
+            "message": f"Пользователь '{login}' успешно вошёл в систему",
+            "client_uuid": client_uuid
+        }))
+        
+        # Устанавливаем cookie с client_uuid
+        response.set_cookie('client_id', client_uuid, httponly=True, samesite='Lax', max_age=30*24*60*60)
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка при входе: {e}")
+        return jsonify({"success": False, "error": f"Внутренняя ошибка сервера: {str(e)}"}), 500
+
+@app.route('/api/auth/logout', methods=['POST'])
+def api_logout():
+    """Выход пользователя."""
+    try:
+        logger.info("🚪 Пользователь выходит из системы")
+        
+        response = make_response(jsonify({
+            "success": True,
+            "message": "Вы успешно вышли из системы"
+        }))
+        
+        # Удаляем cookie
+        response.delete_cookie('client_id')
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка при выходе: {e}")
+        return jsonify({"success": False, "error": f"Внутренняя ошибка сервера: {str(e)}"}), 500
+
+@app.route('/api/auth/status', methods=['GET'])
+def api_auth_status():
+    """Проверка статуса аутентификации."""
+    try:
+        client_id = request.cookies.get('client_id')
+        
+        if client_id:
+            ensure_client_in_db(client_id)
+            return jsonify({
+                "authenticated": True,
+                "client_id": client_id
+            })
+        else:
+            return jsonify({
+                "authenticated": False,
+                "client_id": None
+            })
+            
+    except Exception as e:
+        logger.error(f"❌ Ошибка проверки статуса: {e}")
+        return jsonify({
+            "authenticated": False,
+            "error": str(e)
+        }), 500
 
 def get_index_html():
     """Читает index.html как строку и удаляет BOM, если есть."""
