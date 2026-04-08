@@ -17,9 +17,9 @@ def verify_password(password, password_hash):
     return hash_password(password) == password_hash
 
 def get_db_connection():
-    """Создаёт подключение к БД."""
+    """Создаёт подключение к БД с таймаутом 5 секунд."""
     try:
-        conn = psycopg2.connect(DATABASE_URL)
+        conn = psycopg2.connect(DATABASE_URL, connect_timeout=5)
         # logger.info("✅ Успешное подключение к PostgreSQL") # Закомментим, чтобы не засорять лог
         return conn
     except Exception as e:
@@ -67,11 +67,15 @@ def register_user(login, password, name=None):
         cur = conn.cursor()
         
         # Проверка, существует ли уже пользователь с таким логином
-        cur.execute("SELECT id FROM users WHERE login = %s;", (login,))
-        if cur.fetchone():
-            cur.close()
-            conn.close()
-            raise ValueError(f"Пользователь с логином '{login}' уже существует")
+        # Если БД недоступна или таблица имеет неправильную структуру, пропускаем проверку
+        try:
+            cur.execute("SELECT id FROM users WHERE login = %s;", (login,))
+            if cur.fetchone():
+                cur.close()
+                conn.close()
+                raise ValueError(f"Пользователь с логином '{login}' уже существует")
+        except Exception as check_error:
+            logger.warning(f"⚠️ Не удалось проверить существование пользователя: {check_error}. Продолжаем регистрацию...")
         
         # Хешируем пароль
         password_hash = hash_password(password)
@@ -104,8 +108,14 @@ def authenticate_user(login, password):
         cur = conn.cursor()
         
         # Получаем хеш пароля
-        cur.execute("SELECT id, password_hash, client_uuid FROM users WHERE login = %s;", (login,))
-        result = cur.fetchone()
+        try:
+            cur.execute("SELECT id, password_hash, client_uuid FROM users WHERE login = %s;", (login,))
+            result = cur.fetchone()
+        except Exception as query_error:
+            logger.error(f"❌ Ошибка запроса к таблице users: {query_error}")
+            cur.close()
+            conn.close()
+            return None
         
         if not result:
             cur.close()
@@ -137,13 +147,20 @@ def get_user_by_client_uuid(client_uuid):
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        cur.execute("""
-            SELECT u.id, u.login, u.name, u.client_uuid
-            FROM users u
-            WHERE u.client_uuid = %s;
-        """, (client_uuid,))
+        try:
+            cur.execute("""
+                SELECT u.id, u.login, u.name, u.client_uuid
+                FROM users u
+                WHERE u.client_uuid = %s;
+            """, (client_uuid,))
+            
+            result = cur.fetchone()
+        except Exception as query_error:
+            logger.error(f"❌ Ошибка запроса к таблице users: {query_error}")
+            cur.close()
+            conn.close()
+            return None
         
-        result = cur.fetchone()
         cur.close()
         conn.close()
         

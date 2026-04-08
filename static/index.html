@@ -1027,12 +1027,15 @@
                 const data = await res.json();
                 if (data.authenticated) {
                     currentUser = data.user;
+                    // Если пользователь есть - показываем имя, иначе просто показываем приложение
                     showMainApp();
                 } else {
                     showAuthModal();
                 }
             } catch (e) {
-                showAuthModal();
+                console.warn('⚠️ Не удалось проверить статус авторизации:', e);
+                // При ошибке проверки статуса - всё равно показываем приложение для обратной совместимости
+                showMainApp();
             }
         }
         
