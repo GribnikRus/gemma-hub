@@ -67,6 +67,12 @@
         <!-- МОДУЛЬ 3: ГРУППЫ -->
         <div id="mod-groups" class="module">
             <h3>Мои Группы</h3>
+            
+            <h4>Создать новую группу</h4>
+            <input type="text" id="new-group-name" placeholder="Введите название группы..." style="width: 70%; display: inline-block;">
+            <button class="action" onclick="createGroup()" id="btn-create-group" style="width: 28%; display: inline-block;">➕ Создать</button>
+            <div id="create-group-result" class="log" style="min-height: 50px;"></div>
+            
             <h4>Доступные пользователи (для приглашения)</h4>
                 <div id="clients-list" class="log"></div>
                 <button onclick="loadAllClients()">🔄 Обновить список пользователей</button>
@@ -173,7 +179,7 @@
                 await new Promise(resolve => setTimeout(resolve, interval));
             }
 
-            logDiv.textContent = `⏰ Таймаут ожидания результата задачи ${taskId}.`;
+            logDiv.textContent = `⏰ Таймаут ожидания результата задачи ${taskId}. Попробуйте позже или обратитесь к администратору.`;
         }
 
         // --- ФУНКЦИЯ: Загрузить список групп текущего клиента ---
@@ -378,6 +384,52 @@
                 container.style.display = 'none';
                 // Удалим элемент, чтобы не накапливались
                 container.remove();
+            }
+        }
+
+        // --- ФУНКЦИЯ: Создать новую группу ---
+        async function createGroup() {
+            const groupNameInput = document.getElementById('new-group-name');
+            const groupName = groupNameInput.value.trim();
+            const resultDiv = document.getElementById('create-group-result');
+            const btn = document.getElementById('btn-create-group');
+
+            if (!groupName) {
+                resultDiv.innerHTML = '<div class="system">❌ Введите название группы.</div>';
+                return;
+            }
+
+            try {
+                btn.disabled = true;
+                btn.textContent = '⏳ Создание...';
+                resultDiv.innerHTML = '<div class="system">⏳ Создание группы...</div>';
+
+                const res = await fetch('/api/group/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: groupName })
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const data = await res.json();
+                console.log("👥 Результат создания группы:", data);
+
+                if (data.success) {
+                    resultDiv.innerHTML = `<div class="assistant">✅ Группа "${groupName}" успешно создана с ID ${data.group_id}!</div>`;
+                    groupNameInput.value = ''; // Очистить поле
+                    // Обновить список групп владельца
+                    loadAllClients(); // Перезагрузим, чтобы обновился список для приглашений
+                } else {
+                    resultDiv.innerHTML = `<div class="system">❌ Ошибка: ${data.error}</div>`;
+                }
+
+            } catch (e) {
+                console.error("❌ Ошибка создания группы:", e);
+                resultDiv.innerHTML = `<div class="system">❌ Ошибка создания группы: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '➕ Создать';
             }
         }
 
