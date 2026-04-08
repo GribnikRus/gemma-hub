@@ -35,12 +35,19 @@
         .log .user { color: #059669; font-weight: bold; }
         .log .assistant { color: #2563eb; }
         .log .system { color: #6b7280; font-style: italic; font-size: 0.85rem; }
-        .log .group-item { color: #4b5563; font-size: 0.9rem; }
+        .log .group-item { color: #4b5563; font-size: 1rem; line-height: 1.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .log .group-item b { flex-shrink: 0; }
+        .log .group-item button { flex-shrink: 0; }
+        
+        /* Индикатор статуса ИИ */
+        .ai-status { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; font-size: 0.7em; padding: 4px 10px; border-radius: 12px; background: #e0f2fe; color: #0369a1; }
+        .ai-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🤖 Gemma Hub <span style="font-size:0.6em; color:#6b7280">v1.0</span></h1>
+        <h1>🤖 Gemma Hub <span style="font-size:0.6em; color:#6b7280">v1.0</span><span class="ai-status" title="ИИ доступен и готов к работе"><span class="ai-status-dot"></span>Готов</span></h1>
         
         <div class="tabs">
             <button class="tab active" onclick="switchTab('chat')">💬 Текстовый чат</button>
@@ -246,7 +253,7 @@
         }
 
         // --- НОВАЯ ФУНКЦИЯ POLLING ---
-        async function pollTaskStatus(taskId, containerId, maxAttempts = 120, interval = 3000) {
+        async function pollTaskStatus(taskId, containerId, maxAttempts = 300, interval = 2000) {
             let attempts = 0;
             const logDiv = document.createElement('div'); // Исправлено: добавлена точка с запятой
             logDiv.className = 'system'; // Исправлено: добавлена точка с запятой
@@ -316,8 +323,8 @@
                     // Отформатируем дату, если нужно
                     const formattedDate = new Date(group.joined_at).toLocaleString();
                     groupDiv.innerHTML = `
-                        <b>${group.name}</b> (ID: ${group.id}) - Присоединён: ${formattedDate}
-                        <br><button class="small" onclick="loadGroupHistory(${group.id}, '${group.name.replace(/'/g, "&apos;")}')">Показать историю</button>
+                        <span><b>${group.name}</b> (ID: ${group.id}) - Присоединён: ${formattedDate}</span>
+                        <button class="small" onclick="loadGroupHistory(${group.id}, '${group.name.replace(/'/g, "&apos;")}')">Показать историю</button>
                     `;
                     container.appendChild(groupDiv);
                 });
@@ -358,12 +365,15 @@
                     const itemDiv = document.createElement('div');
                     // Используем 'group-item', чтобы отличить от личных сообщений
                     itemDiv.className = 'group-item';
+                    itemDiv.style.whiteSpace = 'normal'; // Разрешаем перенос для истории
+                    itemDiv.style.flexDirection = 'column'; // Вертикальное расположение для истории
+                    itemDiv.style.alignItems = 'flex-start';
                     const formattedTime = new Date(item.created_at).toLocaleString();
                     itemDiv.innerHTML = `
-                        [<b>${item.client_name}</b> @ ${formattedTime}] (<i>${item.module}</i>)
-                        <br><b>Запрос:</b> ${item.prompt}
-                        <br><b>Ответ:</b> ${item.response}
-                        <hr>
+                        <div style="margin-bottom: 5px;">[<b>${item.client_name}</b> @ ${formattedTime}] (<i>${item.module}</i>)</div>
+                        <div style="margin-bottom: 3px;"><b>Запрос:</b> ${item.prompt}</div>
+                        <div><b>Ответ:</b> ${item.response}</div>
+                        <hr style="width: 100%; margin: 10px 0; border: none; border-top: 1px solid #e5e7eb;">
                     `;
                     historyContainer.appendChild(itemDiv);
                 });
@@ -437,8 +447,8 @@
                     const formattedDate = new Date(client.created_at).toLocaleString();
                     // Изменим кнопку: теперь она будет открывать выбор группы
                     clientDiv.innerHTML = `
-                        <b>${client.name}</b> (ID: ${client.client_uuid.substring(0, 8)}...) - Зарегистрирован: ${formattedDate}
-                        <br><button class="small" onclick="showInviteDialog('${client.client_uuid}', '${client.name.replace(/'/g, "&apos;")}', ${JSON.stringify(ownedGroups).replace(/"/g, '&quot;')})">Пригласить в группу...</button>
+                        <span><b>${client.name}</b> (ID: ${client.client_uuid.substring(0, 8)}...) - Зарегистрирован: ${formattedDate}</span>
+                        <button class="small" onclick="showInviteDialog('${client.client_uuid}', '${client.name.replace(/'/g, "&apos;")}', ${JSON.stringify(ownedGroups).replace(/"/g, '&quot;')})">Пригласить в группу...</button>
                     `;
                     container.appendChild(clientDiv);
                 });
@@ -672,9 +682,9 @@
                     invDiv.className = 'group-item';
                     const groupName = groupMap[inv.group_id] || `Группа ${inv.group_id}`;
                     invDiv.innerHTML = `
-                        Приглашение в группу <b>${groupName}</b> от пользователя <b>${inv.inviter_name}</b>.
-                        <br><button class="small" onclick="respondToInvite(${inv.membership_id}, 'accept')">✅ Принять</button>
-                        <button class="small" onclick="respondToInvite(${inv.membership_id}, 'reject')">❌ Отклонить</button>
+                        <span>Приглашение в группу <b>${groupName}</b> от пользователя <b>${inv.inviter_name}</b>.</span>
+                        <div><button class="small" onclick="respondToInvite(${inv.membership_id}, 'accept')">✅ Принять</button>
+                        <button class="small" onclick="respondToInvite(${inv.membership_id}, 'reject')">❌ Отклонить</button></div>
                     `;
                     container.appendChild(invDiv);
                 });

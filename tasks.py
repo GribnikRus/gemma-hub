@@ -19,7 +19,7 @@ def process_chat_task(self, prompt, user_ip, client_id):
             "prompt": prompt,
             "stream": False
         }
-        response = requests.post(OLLAMA_URL, json=payload, timeout=300)
+        response = requests.post(OLLAMA_URL, json=payload, timeout=600)
         response.raise_for_status()
         result = response.json().get("response", "Модель не вернула ответ.")
 
@@ -56,7 +56,7 @@ def process_vision_task(self, prompt, images_b64, user_ip, client_id): # Доб�
             "images": images_b64,
             "stream": False
         }
-        response = requests.post(OLLAMA_URL, json=payload, timeout=600)
+        response = requests.post(OLLAMA_URL, json=payload, timeout=900)
         response.raise_for_status()
         result = response.json().get("response", "Модель не вернула ответ.")
 
