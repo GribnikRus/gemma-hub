@@ -1,1 +1,35 @@
-Nothing should be ignored based on the provided file changes. The only modified file is 'migrate_auth.py', which is a source code file and should not be added to .gitignore.
+# Test directories
+tests/__pycache__/
+__pycache__/
+
+# Python specific
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg-info/
+.eggs/
+
+# Coverage reports
+.coverage
+htmlcov/
+.coverage.*
+
+# Pytest cache
+.pytest_cache/
+pytest_debug.log
+
+# VS Code
+.vscode/
+
+# System files
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# Environment files
+.env
+.env.local
+*.env.*
