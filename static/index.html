@@ -60,6 +60,16 @@
             <input type="file" id="img-input" multiple accept="image/*" onchange="previewImages()">
             <div id="img-preview" class="preview"></div>
             <textarea id="vision-prompt" placeholder="Что нужно сделать с изображением? (например: 'Распознай текст', 'Опиши объекты')"></textarea>
+            
+            <!-- Поле выбора предыдущих промтов -->
+            <div style="margin-bottom: 1rem;">
+                <label for="vision-preset-select" style="font-weight: 500; display: block; margin-bottom: 0.5rem;">📋Previous prompts:</label>
+                <select id="vision-preset-select" onchange="selectVisionPreset()" style="width: 100%; padding: 0.6rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; cursor: pointer;">
+                    <option value="">-- Выберите предыдущий промт --</option>
+                </select>
+                <button onclick="clearVisionPresets()" class="small" style="margin-top: 0.5rem; padding: 0.4rem 0.8rem; font-size: 0.85rem;" title="Очистить историю промтов">🗑️ Очистить историю</button>
+            </div>
+            
             <button class="action" onclick="sendVision()" id="btn-vision">Анализировать</button>
             <div id="vision-log" class="log"><div class="system">Загрузите изображение и укажите задачу.</div></div>
         </div>
@@ -91,6 +101,98 @@
     <!-- Скрипт вставлен внутрь HTML -->
     <script>
         let imagesBase64 = [];
+        
+        // Константа для localStorage - история промтов для изображений
+        const VISION_PROMPTS_KEY = 'vision_prompts_history';
+        const MAX_VISION_PROMPTS = 20; // Максимальное количество сохраняемых промтов
+
+        // Функция загрузки списка предыдущих промтов в select
+        function loadVisionPresets() {
+            const select = document.getElementById('vision-preset-select');
+            const prompts = getVisionPrompts();
+            
+            // Сохраняем текущее значение, если есть
+            const currentValue = select.value;
+            
+            // Очищаем select (кроме первого элемента)
+            select.innerHTML = '<option value="">-- Выберите предыдущий промт --</option>';
+            
+            // Добавляем промты (в обратном порядке - новые сверху)
+            prompts.forEach((prompt, index) => {
+                const option = document.createElement('option');
+                option.value = prompt;
+                // Обрезаем длинные промты для отображения
+                const displayText = prompt.length > 50 ? prompt.substring(0, 50) + '...' : prompt;
+                option.textContent = displayText;
+                select.appendChild(option);
+            });
+            
+            // Восстанавливаем значение, если оно ещё существует
+            if (prompts.includes(currentValue)) {
+                select.value = currentValue;
+            }
+        }
+
+        // Получить промты из localStorage
+        function getVisionPrompts() {
+            try {
+                const stored = localStorage.getItem(VISION_PROMPTS_KEY);
+                return stored ? JSON.parse(stored) : [];
+            } catch (e) {
+                console.error('Ошибка чтения истории промтов:', e);
+                return [];
+            }
+        }
+
+        // Сохранить новый промт в историю
+        function saveVisionPrompt(prompt) {
+            if (!prompt || !prompt.trim()) return;
+            
+            try {
+                let prompts = getVisionPrompts();
+                
+                // Удаляем дубликат, если такой промт уже есть
+                prompts = prompts.filter(p => p !== prompt.trim());
+                
+                // Добавляем новый промт в начало массива
+                prompts.unshift(prompt.trim());
+                
+                // Ограничиваем количество промтов
+                if (prompts.length > MAX_VISION_PROMPTS) {
+                    prompts = prompts.slice(0, MAX_VISION_PROMPTS);
+                }
+                
+                localStorage.setItem(VISION_PROMPTS_KEY, JSON.stringify(prompts));
+                loadVisionPresets();
+            } catch (e) {
+                console.error('Ошибка сохранения промта:', e);
+            }
+        }
+
+        // Выбрать промт из списка и подставить в поле ввода
+        function selectVisionPreset() {
+            const select = document.getElementById('vision-preset-select');
+            const promptTextarea = document.getElementById('vision-prompt');
+            
+            if (select.value) {
+                promptTextarea.value = select.value;
+                promptTextarea.focus();
+                // Сбрасываем выбор обратно на пустой элемент
+                select.value = '';
+            }
+        }
+
+        // Очистить всю историю промтов
+        function clearVisionPresets() {
+            if (confirm('Вы уверены, что хотите очистить историю всех предыдущих промтов?')) {
+                try {
+                    localStorage.removeItem(VISION_PROMPTS_KEY);
+                    loadVisionPresets();
+                } catch (e) {
+                    console.error('Ошибка очистки истории:', e);
+                }
+            }
+        }
 
         function switchTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -101,6 +203,11 @@
             // Если переключаемся на вкладку "Группы", загрузим список групп
             if (tab === 'groups') {
                 loadClientGroups();
+            }
+            
+            // Если переключаемся на вкладку "Изображения", загрузим список промтов
+            if (tab === 'vision') {
+                loadVisionPresets();
             }
         }
 
@@ -656,6 +763,9 @@
         async function sendVision() {
             const prompt = document.getElementById('vision-prompt').value.trim() || 'Опиши изображение.';
             if (imagesBase64.length === 0) { alert('Загрузите хотя бы одно изображение!'); return; }
+            
+            // Сохраняем промт в историю перед отправкой
+            saveVisionPrompt(prompt);
             
             const btn = document.getElementById('btn-vision');
             btn.disabled = true; appendLog('vision-log', 'user', `${prompt} (${imagesBase64.length} изобр.)`);
