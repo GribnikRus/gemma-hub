@@ -44,10 +44,57 @@
         .ai-status { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; font-size: 0.7em; padding: 4px 10px; border-radius: 12px; background: #e0f2fe; color: #0369a1; }
         .ai-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; animation: pulse 2s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        /* Стили авторизации */
+        .auth-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; justify-content: center; align-items: center; }
+        .auth-modal { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); max-width: 400px; width: 90%; }
+        .auth-modal h2 { text-align: center; margin-bottom: 1.5rem; color: #111827; }
+        .auth-form input { width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1rem; font-size: 1rem; }
+        .auth-form button { width: 100%; padding: 0.8rem; background: var(--primary); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; margin-bottom: 0.5rem; }
+        .auth-form button:hover { background: var(--primary-hover); }
+        .auth-toggle { text-align: center; margin-top: 1rem; color: #6b7280; }
+        .auth-toggle a { color: var(--primary); cursor: pointer; text-decoration: underline; }
+        .auth-error { color: #dc2626; text-align: center; margin-bottom: 1rem; font-size: 0.9rem; }
+        .user-info { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem; background: #e0f2fe; border-radius: 8px; margin-bottom: 1rem; }
+        .user-info span { font-weight: 500; color: #0369a1; }
+        .btn-logout { padding: 0.4rem 0.8rem; background: #dc2626; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+        .btn-logout:hover { background: #b91c1c; }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
-    <div class="container">
+    <!-- Модальное окно авторизации -->
+    <div id="auth-overlay" class="auth-overlay hidden">
+        <div class="auth-modal">
+            <h2 id="auth-title">Вход в систему</h2>
+            <div id="auth-error" class="auth-error hidden"></div>
+            
+            <!-- Форма входа -->
+            <div id="login-form" class="auth-form">
+                <input type="text" id="login-username" placeholder="Логин" autocomplete="username">
+                <input type="password" id="login-password" placeholder="Пароль" autocomplete="current-password">
+                <button onclick="login()">Войти</button>
+                <div class="auth-toggle">Нет аккаунта? <a onclick="showRegister()">Зарегистрироваться</a></div>
+            </div>
+            
+            <!-- Форма регистрации -->
+            <div id="register-form" class="auth-form hidden">
+                <input type="text" id="register-login" placeholder="Логин" autocomplete="username">
+                <input type="text" id="register-name" placeholder="Ваше имя">
+                <input type="password" id="register-password" placeholder="Пароль" autocomplete="new-password">
+                <input type="password" id="register-confirm" placeholder="Подтвердите пароль" autocomplete="new-password">
+                <button onclick="register()">Зарегистрироваться</button>
+                <div class="auth-toggle">Есть аккаунт? <a onclick="showLogin()">Войти</a></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container hidden" id="main-container">
+        <div class="user-info">
+            <span id="user-display">👤 <b id="user-name">Гость</b></span>
+            <button class="btn-logout" onclick="logout()">Выйти</button>
+        </div>
+        
         <h1>🤖 Gemma Hub <span style="font-size:0.6em; color:#6b7280">v1.0</span><span class="ai-status" title="ИИ доступен и готов к работе"><span class="ai-status-dot"></span>Готов</span></h1>
         
         <div class="tabs">
@@ -968,6 +1015,155 @@
                 if (active === 'mod-groups') loadClientGroups(); // Пример действия для Ctrl+Enter на вкладке "Группы"
             }
         });
+        
+        // ==================== АВТОРИЗАЦИЯ ====================
+        let currentUser = null;
+        
+        // Проверка статуса авторизации при загрузке страницы
+        async function checkAuthStatus() {
+            try {
+                const res = await fetch('/api/auth/status');
+                if (!res.ok) throw new Error('Not authenticated');
+                const data = await res.json();
+                if (data.authenticated) {
+                    currentUser = data.user;
+                    showMainApp();
+                } else {
+                    showAuthModal();
+                }
+            } catch (e) {
+                showAuthModal();
+            }
+        }
+        
+        function showAuthModal() {
+            document.getElementById('auth-overlay').classList.remove('hidden');
+            document.getElementById('main-container').classList.add('hidden');
+        }
+        
+        function showMainApp() {
+            document.getElementById('auth-overlay').classList.add('hidden');
+            document.getElementById('main-container').classList.remove('hidden');
+            if (currentUser) {
+                document.getElementById('user-name').textContent = currentUser.name || currentUser.login;
+            }
+        }
+        
+        function showRegister() {
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('register-form').classList.remove('hidden');
+            document.getElementById('auth-title').textContent = 'Регистрация';
+            document.getElementById('auth-error').classList.add('hidden');
+        }
+        
+        function showLogin() {
+            document.getElementById('register-form').classList.add('hidden');
+            document.getElementById('login-form').classList.remove('hidden');
+            document.getElementById('auth-title').textContent = 'Вход в систему';
+            document.getElementById('auth-error').classList.add('hidden');
+        }
+        
+        function showError(msg) {
+            const errorDiv = document.getElementById('auth-error');
+            errorDiv.textContent = msg;
+            errorDiv.classList.remove('hidden');
+        }
+        
+        async function login() {
+            const username = document.getElementById('login-username').value.trim();
+            const password = document.getElementById('login-password').value;
+            
+            if (!username || !password) {
+                showError('Введите логин и пароль');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login: username, password: password })
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok && data.success) {
+                    currentUser = data.user;
+                    showMainApp();
+                    // Загружаем начальные данные
+                    loadChatGroups();
+                    loadClientGroups();
+                } else {
+                    showError(data.error || 'Ошибка входа');
+                }
+            } catch (e) {
+                showError('Ошибка соединения с сервером');
+            }
+        }
+        
+        async function register() {
+            const login = document.getElementById('register-login').value.trim();
+            const name = document.getElementById('register-name').value.trim();
+            const password = document.getElementById('register-password').value;
+            const confirm = document.getElementById('register-confirm').value;
+            
+            if (!login || !password) {
+                showError('Введите логин и пароль');
+                return;
+            }
+            
+            if (password !== confirm) {
+                showError('Пароли не совпадают');
+                return;
+            }
+            
+            if (password.length < 4) {
+                showError('Пароль должен быть не менее 4 символов');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login: login, name: name || login, password: password })
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok && data.success) {
+                    currentUser = data.user;
+                    showMainApp();
+                    // Загружаем начальные данные
+                    loadChatGroups();
+                    loadClientGroups();
+                } else {
+                    showError(data.error || 'Ошибка регистрации');
+                }
+            } catch (e) {
+                showError('Ошибка соединения с сервером');
+            }
+        }
+        
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+            } catch (e) {
+                console.error('Ошибка выхода:', e);
+            }
+            currentUser = null;
+            showAuthModal();
+            // Очищаем поля
+            document.getElementById('login-username').value = '';
+            document.getElementById('login-password').value = '';
+            document.getElementById('register-login').value = '';
+            document.getElementById('register-name').value = '';
+            document.getElementById('register-password').value = '';
+            document.getElementById('register-confirm').value = '';
+        }
+        
+        // Запуск проверки авторизации при загрузке
+        checkAuthStatus();
     </script>
 </body>
 </html>
