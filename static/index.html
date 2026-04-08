@@ -941,13 +941,16 @@
             appendLog('chat-log', 'user', prompt);
             
             try {
-                const data = await fetchAPI('/api/chat', { prompt });
+                // Передаём group_id на сервер
+                const data = await fetchAPI('/api/chat', { prompt, group_id: groupId ? parseInt(groupId) : null });
                 // Запускаем опрос статуса задачи
                 await pollTaskStatus(data.task_id, 'chat-log');
                 
                 // После успешного ответа, если была группа, обновляем историю группы
                 if (groupId) {
                     loadGroupChatHistory(groupId);
+                } else {
+                    loadPersonalChatHistory();
                 }
 
             } catch (e) {

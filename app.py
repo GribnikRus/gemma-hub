@@ -208,14 +208,15 @@ def api_chat():
     try:
         data = request.json
         prompt = data.get('prompt', '')
+        group_id = data.get('group_id')  # Получаем group_id, если передан
         user_ip = request.remote_addr
         client_id, _ = get_or_create_client_id() # Получаем client_id
         ensure_client_in_db(client_id) # Убедимся, что запись в БД есть
 
-        logger.info(f"💬 Получен чат-запрос от {user_ip} (client_id: {client_id}): {prompt[:30]}...")
+        logger.info(f"💬 Получен чат-запрос от {user_ip} (client_id: {client_id}, group_id: {group_id}): {prompt[:30]}...")
         
-        # --- ИСПРАВЛЕНО: Передаём client_id в задачу ---
-        task = process_chat_task.delay(prompt, user_ip, client_id)
+        # --- ИСПРАВЛЕНО: Передаём client_id и group_id в задачу ---
+        task = process_chat_task.delay(prompt, user_ip, client_id, group_id)
         logger.info(f"💬 Задача в очереди: {task.id}")
         return jsonify({"task_id": task.id, "status": "queued"})
     except Exception as e:
