@@ -1,13 +1,11 @@
 import requests
-
-OLLAMA_URL = "http://192.168.0.166:11434/api/generate"
-MODEL = "gemma4:e4b"
+from config import OLLAMA_URL, OLLAMA_MODEL_CHAT
 
 def process_chat(prompt: str) -> str:
     """Отправляет текстовый запрос в Ollama и возвращает ответ."""
     try:
         payload = {
-            "model": MODEL,
+            "model": OLLAMA_MODEL_CHAT,
             "prompt": prompt.strip(),
             "stream": False
         }

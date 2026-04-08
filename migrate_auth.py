@@ -5,14 +5,12 @@ import psycopg2
 from config import DATABASE_URL
 import logging
 import uuid
-import hashlib
+
+# Импортируем функцию хеширования из db.py вместо дублирования
+from db import hash_password
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-def hash_password(password):
-    """Хеширует пароль с помощью SHA-256."""
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
 def migrate():
     """Создаёт таблицу users и генерирует client_uuid для существующих записей."""

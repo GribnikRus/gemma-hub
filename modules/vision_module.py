@@ -1,13 +1,11 @@
 import requests
-
-OLLAMA_URL = "http://192.168.0.166:11434/api/generate"
-MODEL = "gemma4:e4b"
+from config import OLLAMA_URL, OLLAMA_MODEL_VISION
 
 def process_image(prompt: str, images_base64: list) -> str:
     """Отправляет промпт + изображения (base64) в Ollama."""
     try:
         payload = {
-            "model": MODEL,
+            "model": OLLAMA_MODEL_VISION,
             "prompt": prompt.strip(),
             "images": images_base64,
             "stream": False

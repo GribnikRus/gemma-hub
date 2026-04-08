@@ -1,18 +1,35 @@
+```
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+# Dependencies
+.venv/
+venv/
+env/
 .env
 .env.local
-*.env.*
-.DS_Store
+.env.*
+
+# Logs
 *.log
-*.pid
-*.tmp
-*.swp
-*.swo
-venv/
-.venv/
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
+
+# IDE
 .vscode/
 .idea/
-dump.rdb
+*.swp
+*.swo
+*.tmp
+
+# Build artifacts
+dist/
+build/
+target/
+```

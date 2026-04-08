@@ -1,6 +1,6 @@
 # tasks.py
 from celery import Celery
-from config import OLLAMA_URL
+from config import OLLAMA_URL, CELERY_BROKER_URL, CELERY_RESULT_BACKEND, OLLAMA_MODEL_CHAT, OLLAMA_MODEL_VISION
 import requests
 from db import save_task_history
 import logging
@@ -8,14 +8,14 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-celery_app = Celery('gemma_tasks', broker='redis://localhost:6379/0', backend='redis://localhost:6379/0')
+celery_app = Celery('gemma_tasks', broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
 
 @celery_app.task(bind=True, max_retries=3)
 def process_chat_task(self, prompt, user_ip, client_id):
     try:
         logger.info(f"💬 Начинаю обработку чата (client_id: {client_id}): {prompt[:30]}...")
         payload = {
-            "model": "gemma4:e4b",
+            "model": OLLAMA_MODEL_CHAT,
             "prompt": prompt,
             "stream": False
         }
@@ -51,7 +51,7 @@ def process_vision_task(self, prompt, images_b64, user_ip, client_id): # Доб�
     try:
         logger.info(f"🖼️ Начинаю обработку изображения (client_id: {client_id}): {prompt[:30]}..., images: {len(images_b64)}")
         payload = {
-            "model": "gemma4:e4b",
+            "model": OLLAMA_MODEL_VISION,
             "prompt": prompt,
             "images": images_b64,
             "stream": False
