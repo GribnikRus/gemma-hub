@@ -35,7 +35,8 @@
         .log .user { color: #059669; font-weight: bold; }
         .log .assistant { color: #2563eb; }
         .log .system { color: #6b7280; font-style: italic; font-size: 0.85rem; }
-        .log .group-item { color: #4b5563; font-size: 1rem; line-height: 1.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .log .group-item { color: #4b5563; font-size: 1rem; line-height: 1.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+        .log .group-item:last-child { border-bottom: none; }
         .log .group-item b { flex-shrink: 0; }
         .log .group-item button { flex-shrink: 0; }
         
@@ -57,6 +58,12 @@
 
         <!-- МОДУЛЬ 1: ЧАТ -->
         <div id="mod-chat" class="module active">
+            <div style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                <label for="chat-group-select" style="font-weight: 500;">👥 Группа:</label>
+                <select id="chat-group-select" onchange="selectChatGroup()" style="flex: 1; padding: 0.6rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; cursor: pointer;">
+                    <option value="">-- Личный чат --</option>
+                </select>
+            </div>
             <textarea id="chat-prompt" placeholder="Введите ваш вопрос или задание..."></textarea>
             <button class="action" onclick="sendChat()" id="btn-chat">Отправить</button>
             <div id="chat-log" class="log"><div class="system">Готов к диалогу. Задайте вопрос.</div></div>
@@ -216,6 +223,11 @@
             if (tab === 'vision') {
                 loadVisionPresets();
             }
+            
+            // Если переключаемся на вкладку "Чат", загрузим список групп для выбора
+            if (tab === 'chat') {
+                loadChatGroups();
+            }
         }
 
         function appendLog(containerId, role, text) {
@@ -332,6 +344,141 @@
             } catch (e) {
                 console.error("❌ Ошибка загрузки групп:", e);
                 document.getElementById('groups-list').innerHTML = `<div class="system">❌ Ошибка загрузки групп: ${e.message}</div>`;
+            }
+        }
+
+        // --- ФУНКЦИЯ: Загрузить список групп для чата (все группы пользователя) ---
+        async function loadChatGroups() {
+            try {
+                // Загружаем группы, где пользователь состоит
+                const groupsRes = await fetch('/api/client/groups');
+                if (!groupsRes.ok) throw new Error(`HTTP ${groupsRes.status}`);
+                const groupsData = await groupsRes.json();
+                
+                // Загружаем группы, которыми пользователь владеет
+                const ownedRes = await fetch('/api/client/owned-groups');
+                if (!ownedRes.ok) throw new Error(`HTTP ${ownedRes.status}`);
+                const ownedData = await ownedRes.json();
+
+                const select = document.getElementById('chat-group-select');
+                select.innerHTML = '<option value="">-- Личный чат --</option>';
+
+                // Объединяем группы, убирая дубликаты по ID
+                const allGroupsMap = new Map();
+                
+                if (groupsData.success && groupsData.groups) {
+                    groupsData.groups.forEach(g => allGroupsMap.set(g.id, g));
+                }
+                if (ownedData.success && ownedData.groups) {
+                    ownedData.groups.forEach(g => allGroupsMap.set(g.id, g));
+                }
+
+                const allGroups = Array.from(allGroupsMap.values());
+
+                if (allGroups.length === 0) {
+                    return; // Оставляем только "Личный чат"
+                }
+
+                allGroups.forEach(group => {
+                    const option = document.createElement('option');
+                    option.value = group.id;
+                    option.textContent = group.name;
+                    select.appendChild(option);
+                });
+
+                // Если была выбрана группа, пробуем восстановить выбор
+                const selectedGroupId = select.getAttribute('data-selected-group');
+                if (selectedGroupId && allGroups.find(g => g.id == selectedGroupId)) {
+                    select.value = selectedGroupId;
+                    loadGroupChatHistory(selectedGroupId);
+                }
+
+            } catch (e) {
+                console.error("❌ Ошибка загрузки групп для чата:", e);
+            }
+        }
+
+        // --- ФУНКЦИЯ: Выбор группы в чате ---
+        function selectChatGroup() {
+            const select = document.getElementById('chat-group-select');
+            const groupId = select.value;
+            
+            // Сохраняем выбранный group_id
+            select.setAttribute('data-selected-group', groupId || '');
+            
+            // Очищаем лог чата
+            const chatLog = document.getElementById('chat-log');
+            chatLog.innerHTML = '';
+            
+            if (groupId) {
+                // Загружаем историю группы
+                loadGroupChatHistory(groupId);
+            } else {
+                // Личный чат - загружаем личную историю
+                loadPersonalChatHistory();
+            }
+        }
+
+        // --- ФУНКЦИЯ: Загрузить историю группы для чата ---
+        async function loadGroupChatHistory(groupId) {
+            try {
+                const res = await fetch(`/api/group/${groupId}/history?limit=50`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                const chatLog = document.getElementById('chat-log');
+                chatLog.innerHTML = '';
+
+                if (!data.success) {
+                    appendLog('chat-log', 'system', `❌ Ошибка получения истории: ${data.error}`);
+                    return;
+                }
+
+                if (data.history.length === 0) {
+                    appendLog('chat-log', 'system', 'В этой группе пока нет сообщений.');
+                    return;
+                }
+
+                // Показываем историю в обратном порядке (старые сверху)
+                data.history.reverse().forEach(item => {
+                    const role = item.client_name ? 'user' : 'assistant';
+                    const name = item.client_name ? ` (${item.client_name})` : '';
+                    appendLog('chat-log', role === 'user' ? 'user' : 'assistant', 
+                        `<b>${role === 'user' ? 'Пользователь' : 'Gemma'}${name}:</b> ${item.prompt}${item.response ? '<br><i>Ответ: ' + item.response + '</i>' : ''}`);
+                });
+
+            } catch (e) {
+                console.error("❌ Ошибка загрузки истории группы:", e);
+                appendLog('chat-log', 'system', `❌ Ошибка: ${e.message}`);
+            }
+        }
+
+        // --- ФУНКЦИЯ: Загрузить личную историю чата ---
+        async function loadPersonalChatHistory() {
+            try {
+                const res = await fetch('/api/history?limit=50');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+
+                const chatLog = document.getElementById('chat-log');
+                chatLog.innerHTML = '';
+
+                if (!data || data.length === 0) {
+                    appendLog('chat-log', 'system', 'История пуста. Начните диалог!');
+                    return;
+                }
+
+                // Показываем историю в обратном порядке (старые сверху)
+                data.reverse().forEach(item => {
+                    appendLog('chat-log', 'user', `<b>Вы:</b> ${item.prompt}`);
+                    if (item.response) {
+                        appendLog('chat-log', 'assistant', `<b>Gemma:</b> ${item.response}`);
+                    }
+                });
+
+            } catch (e) {
+                console.error("❌ Ошибка загрузки личной истории:", e);
+                appendLog('chat-log', 'system', `❌ Ошибка: ${e.message}`);
             }
         }
 
@@ -734,13 +881,25 @@
         async function sendChat() {
             const prompt = document.getElementById('chat-prompt').value.trim();
             if (!prompt) return;
+            
             const btn = document.getElementById('btn-chat');
-            btn.disabled = true; appendLog('chat-log', 'user', prompt);
+            btn.disabled = true;
+            
+            // Проверяем, выбрана ли группа
+            const groupSelect = document.getElementById('chat-group-select');
+            const groupId = groupSelect.value;
+            
+            appendLog('chat-log', 'user', prompt);
             
             try {
                 const data = await fetchAPI('/api/chat', { prompt });
                 // Запускаем опрос статуса задачи
                 await pollTaskStatus(data.task_id, 'chat-log');
+                
+                // После успешного ответа, если была группа, обновляем историю группы
+                if (groupId) {
+                    loadGroupChatHistory(groupId);
+                }
 
             } catch (e) {
                 appendLog('chat-log', 'system', `❌ Ошибка: ${e.message}`);
